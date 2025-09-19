@@ -148,15 +148,15 @@ const Competition = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4 sm:py-8">
         <div className="max-w-2xl mx-auto">
           {/* Progress */}
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-primary font-mono">
+          <div className="mb-6 sm:mb-8">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-2 space-y-1 sm:space-y-0">
+              <span className="text-primary font-mono text-sm sm:text-base">
                 Question {currentQuestionIndex + 1} of {questions.length}
               </span>
-              <span className="text-muted-foreground font-mono">
+              <span className="text-muted-foreground font-mono text-sm">
                 {Math.round(progress)}% Complete
               </span>
             </div>
@@ -164,14 +164,14 @@ const Competition = () => {
           </div>
 
           {/* Question Card */}
-          <Card className="terminal-border mb-8">
-            <CardHeader>
-              <CardTitle className="text-primary font-display text-xl">
+          <Card className="terminal-border mb-6 sm:mb-8">
+            <CardHeader className="pb-4 sm:pb-6">
+              <CardTitle className="text-primary font-display text-lg sm:text-xl">
                 Question #{currentQuestion.question_number}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-lg font-mono leading-relaxed">
+              <p className="text-base sm:text-lg font-mono leading-relaxed">
                 {currentQuestion.question_text}
               </p>
             </CardContent>
@@ -179,59 +179,59 @@ const Competition = () => {
 
           {/* Morse Input Section */}
           <Card className="terminal-border">
-            <CardHeader>
-              <CardTitle className="text-primary font-display">
+            <CardHeader className="pb-4 sm:pb-6">
+              <CardTitle className="text-primary font-display text-lg sm:text-xl">
                 Morse Code Input
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 sm:space-y-6">
               {/* Display Input */}
-              <div className="p-4 bg-muted rounded-lg border terminal-border">
+              <div className="p-3 sm:p-4 bg-muted rounded-lg border terminal-border">
                 <div className="text-center">
                   <span className="text-xs text-muted-foreground block mb-2">
                     YOUR MORSE CODE
                   </span>
-                  <div className="text-3xl font-mono text-morse-glow min-h-[40px] flex items-center justify-center">
+                  <div className="text-2xl sm:text-3xl font-mono text-morse-glow min-h-[40px] flex items-center justify-center break-all">
                     {morseInput || "..."}
                   </div>
                 </div>
               </div>
 
               {/* Input Buttons */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <Button
                   onClick={addDot}
                   size="lg"
                   variant="outline"
-                  className="h-16 text-2xl font-mono terminal-border hover:bg-morse-dot hover:text-background"
+                  className="h-12 sm:h-16 text-xl sm:text-2xl font-mono terminal-border hover:bg-morse-dot hover:text-background"
                 >
                   •
-                  <span className="ml-2 text-sm">DOT</span>
+                  <span className="ml-1 sm:ml-2 text-xs sm:text-sm">DOT</span>
                 </Button>
                 <Button
                   onClick={addDash}
                   size="lg"
                   variant="outline"
-                  className="h-16 text-2xl font-mono terminal-border hover:bg-morse-dash hover:text-background"
+                  className="h-12 sm:h-16 text-xl sm:text-2xl font-mono terminal-border hover:bg-morse-dash hover:text-background"
                 >
                   ─
-                  <span className="ml-2 text-sm">DASH</span>
+                  <span className="ml-1 sm:ml-2 text-xs sm:text-sm">DASH</span>
                 </Button>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <Button
                   onClick={clearInput}
                   variant="destructive"
-                  className="flex-1 font-mono"
+                  className="flex-1 font-mono text-sm sm:text-base"
                   disabled={!morseInput}
                 >
                   CLEAR
                 </Button>
                 <Button
                   onClick={handleSubmit}
-                  className="flex-1 font-mono morse-glow"
+                  className="flex-1 font-mono morse-glow text-sm sm:text-base"
                   disabled={!morseInput}
                 >
                   SUBMIT

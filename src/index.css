@@ -57,6 +57,11 @@
   body {
     @apply bg-background text-foreground font-mono;
     font-family: 'JetBrains Mono', 'Courier New', monospace;
+    /* Improve text rendering on mobile */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Prevent horizontal scrolling on mobile */
+    overflow-x: hidden;
   }
 
   .font-display {
@@ -71,6 +76,64 @@
   .terminal-border {
     border: 1px solid hsl(var(--border));
     box-shadow: 0 0 10px hsl(var(--terminal-glow) / 0.2);
+  }
+
+  /* Responsive utilities */
+  .text-responsive {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-responsive-lg {
+    @apply text-base sm:text-lg;
+  }
+
+  .text-responsive-xl {
+    @apply text-lg sm:text-xl;
+  }
+
+  .spacing-responsive {
+    @apply space-y-3 sm:space-y-4;
+  }
+
+  .padding-responsive {
+    @apply p-3 sm:p-4;
+  }
+
+  .margin-responsive {
+    @apply m-3 sm:m-4;
+  }
+
+  /* Improve button touch targets on mobile */
+  button, .btn {
+    min-height: 44px; /* Minimum touch target size */
+    min-width: 44px;
+  }
+
+  /* Improve form input accessibility on mobile */
+  input, textarea, select {
+    @apply text-base; /* Prevent zoom on iOS */
+    min-height: 44px;
+  }
+
+  /* Better scrolling on mobile */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Mobile-specific improvements */
+@media (max-width: 768px) {
+  .container {
+    @apply px-3;
+  }
+  
+  /* Ensure proper spacing on mobile */
+  .space-y-4 > * + * {
+    margin-top: 1rem;
+  }
+  
+  .space-y-6 > * + * {
+    margin-top: 1.5rem;
   }
 }
 

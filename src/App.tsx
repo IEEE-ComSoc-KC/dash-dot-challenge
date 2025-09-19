@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Login from "./pages/Login";
 import Competition from "./pages/Competition";
 import Results from "./pages/Results";
+import Confirm from "./pages/Confirm";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Login />} />
+            <Route path="/auth/confirm" element={<Confirm />} />
             <Route path="/competition" element={<Competition />} />
             <Route path="/results" element={<Results />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

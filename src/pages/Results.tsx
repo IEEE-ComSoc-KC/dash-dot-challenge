@@ -96,33 +96,33 @@ const Results = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4 sm:py-8">
         <div className="max-w-2xl mx-auto text-center">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-primary mb-4 font-display morse-glow">
+          <div className="mb-6 sm:mb-8">
+            <h1 className="text-3xl sm:text-4xl font-bold text-primary mb-4 font-display morse-glow">
               MISSION COMPLETE
             </h1>
-            <p className="text-muted-foreground font-mono">
+            <p className="text-muted-foreground font-mono text-sm sm:text-base">
               Competition results transmitted
             </p>
           </div>
 
           {/* Score Card */}
-          <Card className="terminal-border mb-8">
-            <CardHeader>
-              <CardTitle className="text-primary font-display">
+          <Card className="terminal-border mb-6 sm:mb-8">
+            <CardHeader className="pb-4 sm:pb-6">
+              <CardTitle className="text-primary font-display text-lg sm:text-xl">
                 FINAL SCORE
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-center space-y-4">
-                <div className="text-6xl font-bold text-morse-glow font-mono">
+                <div className="text-4xl sm:text-6xl font-bold text-morse-glow font-mono">
                   {Math.round(score)}%
                 </div>
-                <div className="text-xl text-primary font-mono">
+                <div className="text-lg sm:text-xl text-primary font-mono">
                   ACCURACY RATING
                 </div>
-                <div className="text-sm text-muted-foreground font-mono mb-2">
+                <div className="text-xs sm:text-sm text-muted-foreground font-mono mb-2">
                   Total Time: {totalTime}s
                 </div>
                 <Progress value={score} className="h-3" />
@@ -131,29 +131,31 @@ const Results = () => {
           </Card>
 
           {/* Answer Summary */}
-          <Card className="terminal-border mb-8">
-            <CardHeader>
-              <CardTitle className="text-primary font-display">
+          <Card className="terminal-border mb-6 sm:mb-8">
+            <CardHeader className="pb-4 sm:pb-6">
+              <CardTitle className="text-primary font-display text-lg sm:text-xl">
                 TRANSMISSION LOG
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {userAnswers.map((answer) => (
-                  <div key={answer.question_number} className="flex justify-between items-center py-2 px-3 bg-muted/50 rounded terminal-border">
-                    <span className="font-mono text-primary">
+                  <div key={answer.question_number} className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 px-3 bg-muted/50 rounded terminal-border space-y-1 sm:space-y-0">
+                    <span className="font-mono text-primary text-sm sm:text-base">
                       Q{answer.question_number}:
                     </span>
-                    <div className="flex items-center space-x-4">
-                      <span className="font-mono text-morse-glow">
+                    <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4">
+                      <span className="font-mono text-morse-glow text-sm sm:text-base break-all">
                         {answer.user_answer}
                       </span>
-                      <span className={`text-xs px-2 py-1 rounded ${answer.is_correct ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                        {answer.is_correct ? '✓' : '✗'}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {answer.time_taken_seconds}s
-                      </span>
+                      <div className="flex items-center space-x-2 sm:space-x-4 text-xs">
+                        <span className={`px-2 py-1 rounded ${answer.is_correct ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {answer.is_correct ? '✓' : '✗'}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {answer.time_taken_seconds}s
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -165,7 +167,7 @@ const Results = () => {
           <div className="flex gap-4 justify-center">
             <Button
               onClick={handleRetry}
-              className="font-mono morse-glow"
+              className="font-mono morse-glow text-sm sm:text-base px-6 sm:px-8"
               size="lg"
             >
               RETRY MISSION

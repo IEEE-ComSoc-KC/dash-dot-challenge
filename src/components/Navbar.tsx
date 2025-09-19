@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronDown, ChevronUp, LogOut } from "lucide-react";
+import { ChevronDown, ChevronUp, LogOut, Menu, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 
 interface LeaderboardEntry {
@@ -14,12 +15,46 @@ interface LeaderboardEntry {
 
 const Navbar = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [userProfile, setUserProfile] = useState<{ display_name: string } | null>(null);
   const { signOut, user } = useAuth();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     loadLeaderboard();
-  }, []);
+    if (user) {
+      loadUserProfile();
+    }
+  }, [user]);
+
+  // Close mobile menu when switching to desktop
+  useEffect(() => {
+    if (!isMobile && isMobileMenuOpen) {
+      setIsMobileMenuOpen(false);
+    }
+  }, [isMobile, isMobileMenuOpen]);
+
+  const loadUserProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("user_id", user.id)
+        .single();
+
+      if (error) {
+        console.error("Error loading user profile:", error);
+        return;
+      }
+
+      setUserProfile(data);
+    } catch (error) {
+      console.error("Error loading user profile:", error);
+    }
+  };
 
   const loadLeaderboard = async () => {
     try {
@@ -85,17 +120,18 @@ const Navbar = () => {
     <nav className="border-b terminal-border bg-background">
       <div className="container mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-primary font-display morse-glow">
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-primary font-display morse-glow">
               MORSE CODE
             </h1>
-            <span className="text-primary font-mono">... --- ...</span>
+            <span className="text-primary font-mono text-sm sm:text-base">... --- ...</span>
           </div>
           
-          <div className="flex items-center space-x-4">
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-4">
             {user && (
               <span className="text-primary font-mono text-sm">
-                Welcome, {user.user_metadata?.name || user.email}
+                Welcome, {userProfile?.display_name || user.email}
               </span>
             )}
             
@@ -119,7 +155,62 @@ const Navbar = () => {
               </Button>
             )}
           </div>
+
+          {/* Mobile Menu Button */}
+          <div className="md:hidden">
+            <Button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              variant="outline"
+              size="sm"
+              className="terminal-border"
+            >
+              {isMobileMenuOpen ? (
+                <X className="h-4 w-4" />
+              ) : (
+                <Menu className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
+
+        {/* Mobile Navigation Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden mt-4 pt-4 border-t terminal-border">
+            <div className="flex flex-col space-y-3">
+              {user && (
+                <div className="text-primary font-mono text-sm px-2">
+                  Welcome, {userProfile?.display_name || user.email}
+                </div>
+              )}
+              
+              <Button
+                onClick={() => {
+                  setIsLeaderboardOpen(!isLeaderboardOpen);
+                  setIsMobileMenuOpen(false);
+                }}
+                variant="outline"
+                className="terminal-border font-mono w-full justify-start"
+              >
+                <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${isLeaderboardOpen ? 'rotate-180' : ''}`} />
+                LEADERBOARD
+              </Button>
+
+              {user && (
+                <Button
+                  onClick={() => {
+                    handleSignOut();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  variant="outline"
+                  className="terminal-border font-mono w-full justify-start"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  SIGN OUT
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Collapsible Leaderboard */}
@@ -128,7 +219,7 @@ const Navbar = () => {
           <div className="container mx-auto px-4 py-4">
             <Card className="terminal-border">
               <CardHeader>
-                <CardTitle className="text-primary font-display">
+                <CardTitle className="text-primary font-display text-lg sm:text-xl">
                   Top 10 Participants
                 </CardTitle>
               </CardHeader>
@@ -136,16 +227,16 @@ const Navbar = () => {
                 <div className="space-y-2">
                   {leaderboard.length > 0 ? (
                     leaderboard.map((entry) => (
-                      <div key={entry.rank} className="flex justify-between items-center py-2 px-3 bg-muted/50 rounded terminal-border">
+                      <div key={entry.rank} className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 px-3 bg-muted/50 rounded terminal-border space-y-1 sm:space-y-0">
                         <div className="flex items-center space-x-3">
                           <span className="text-morse-glow font-mono font-bold min-w-[30px]">
                             #{entry.rank}
                           </span>
-                          <span className="font-mono text-primary">
+                          <span className="font-mono text-primary text-sm sm:text-base">
                             {entry.display_name}
                           </span>
                         </div>
-                        <div className="flex space-x-4 text-sm font-mono">
+                        <div className="flex space-x-4 text-xs sm:text-sm font-mono">
                           <span className="text-morse-glow">
                             {Math.round(entry.total_score)}%
                           </span>
@@ -156,7 +247,7 @@ const Navbar = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="text-center text-muted-foreground font-mono py-4">
+                    <div className="text-center text-muted-foreground font-mono py-4 text-sm">
                       No participants yet
                     </div>
                   )}

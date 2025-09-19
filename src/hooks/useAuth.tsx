@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  signInWithGoogle: () => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUpWithPassword: (email: string, password: string, name?: string) => Promise<{ needsConfirmation: boolean; user: User | null }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
@@ -49,20 +50,46 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
-    const redirectUrl = `${window.location.origin}/competition`;
+  const signInWithPassword = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
     
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
+    if (error) {
+      console.error("Error signing in with email/password:", error);
+      
+      // Provide more specific error for unconfirmed email
+      if (error.message.includes('Email not confirmed')) {
+        throw new Error('Please check your email and click the confirmation link before signing in.');
+      }
+      
+      throw error;
+    }
+  };
+
+  const signUpWithPassword = async (email: string, password: string, name?: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
       options: {
-        redirectTo: redirectUrl,
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
+        data: name ? { full_name: name } : undefined,
       },
     });
     
     if (error) {
-      console.error("Error signing in with Google:", error);
+      console.error("Error signing up with email/password:", error);
       throw error;
     }
+
+    // Check if user needs email confirmation
+    if (data.user && !data.session) {
+      // User was created but needs to confirm email
+      return { needsConfirmation: true, user: data.user };
+    }
+
+    return { needsConfirmation: false, user: data.user };
   };
 
   const signOut = async () => {
@@ -76,7 +103,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const value = {
     user,
     session,
-    signInWithGoogle,
+    signInWithPassword,
+    signUpWithPassword,
     signOut,
     loading,
   };

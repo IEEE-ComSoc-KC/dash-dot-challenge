@@ -1,37 +1,40 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const Login = () => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signInWithGoogle, user, loading } = useAuth();
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!username || !password) {
+  useEffect(() => {
+    if (user) {
+      navigate("/competition");
+    }
+  }, [user, navigate]);
+
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error) {
       toast({
-        title: "Error",
-        description: "Please enter both username and password",
+        title: "Login Failed",
+        description: "Failed to sign in with Google. Please try again.",
         variant: "destructive",
       });
-      return;
     }
-
-    // Simulate login - in real app, this would make an API call
-    localStorage.setItem("user", username);
-    toast({
-      title: "Login Successful",
-      description: `Welcome, ${username}!`,
-    });
-    navigate("/competition");
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-primary font-mono">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -56,39 +59,19 @@ const Login = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="username" className="text-primary">Username</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="terminal-border font-mono"
-                  placeholder="Enter username"
-                />
+            <div className="space-y-6">
+              <div className="text-center text-muted-foreground">
+                Sign in with your Google account to join the competition
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-primary">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="terminal-border font-mono"
-                  placeholder="Enter password"
-                />
-              </div>
-
               <Button 
-                type="submit" 
+                onClick={handleGoogleLogin}
                 className="w-full morse-glow hover:morse-glow font-mono font-semibold"
                 size="lg"
               >
-                CONNECT
+                🚀 CONNECT WITH GOOGLE
               </Button>
-            </form>
+            </div>
           </CardContent>
         </Card>
 

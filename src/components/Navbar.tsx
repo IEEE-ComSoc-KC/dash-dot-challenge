@@ -1,108 +1,171 @@
-import { useState } from "react";
-import { User, Trophy, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, ChevronUp, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
-// Hardcoded leaderboard data
-const leaderboardData = [
-  { rank: 1, username: "MorseExpert", score: 100, time: "2:34" },
-  { rank: 2, username: "CodeMaster", score: 95, time: "3:12" },
-  { rank: 3, username: "DitDahPro", score: 90, time: "2:56" },
-  { rank: 4, username: "RadioOperator", score: 85, time: "4:23" },
-  { rank: 5, username: "TelegraphKing", score: 80, time: "3:45" },
-  { rank: 6, username: "SignalGenius", score: 75, time: "5:12" },
-  { rank: 7, username: "WirelessWiz", score: 70, time: "4:34" },
-  { rank: 8, username: "MorseNinja", score: 65, time: "6:23" },
-  { rank: 9, username: "CodeBreaker", score: 60, time: "5:45" },
-  { rank: 10, username: "DotDashLord", score: 55, time: "7:12" }
-];
+interface LeaderboardEntry {
+  rank: number;
+  display_name: string;
+  total_score: number;
+  total_time: number;
+}
 
 const Navbar = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
-  const currentUser = localStorage.getItem("user") || "Anonymous";
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const { signOut, user } = useAuth();
+
+  useEffect(() => {
+    loadLeaderboard();
+  }, []);
+
+  const loadLeaderboard = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("user_answers")
+        .select(`
+          user_id,
+          is_correct,
+          time_taken_seconds,
+          profiles!inner(display_name)
+        `)
+        .eq("is_correct", true);
+
+      if (error) throw error;
+
+      // Calculate leaderboard scores
+      const userScores: Record<string, { name: string; correct: number; totalTime: number }> = {};
+      
+      data?.forEach((answer: any) => {
+        const userId = answer.user_id;
+        if (!userScores[userId]) {
+          userScores[userId] = {
+            name: answer.profiles.display_name || "Anonymous",
+            correct: 0,
+            totalTime: 0
+          };
+        }
+        userScores[userId].correct += 1;
+        userScores[userId].totalTime += answer.time_taken_seconds;
+      });
+
+      const leaderboardData = Object.entries(userScores)
+        .map(([_, userData]) => ({
+          display_name: userData.name,
+          total_score: (userData.correct / 5) * 100, // 5 total questions
+          total_time: userData.totalTime
+        }))
+        .sort((a, b) => {
+          if (b.total_score !== a.total_score) return b.total_score - a.total_score;
+          return a.total_time - b.total_time;
+        })
+        .slice(0, 10)
+        .map((entry, index) => ({
+          rank: index + 1,
+          ...entry
+        }));
+
+      setLeaderboard(leaderboardData);
+    } catch (error) {
+      console.error("Error loading leaderboard:", error);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
 
   return (
-    <nav className="border-b terminal-border bg-card">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
+    <nav className="border-b terminal-border bg-background">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex justify-between items-center">
           <div className="flex items-center space-x-4">
-            <div className="text-2xl font-bold text-primary font-display">
-              MORSE
-            </div>
-            <div className="text-primary font-mono text-sm">
-              ... --- ...
-            </div>
+            <h1 className="text-2xl font-bold text-primary font-display morse-glow">
+              MORSE CODE
+            </h1>
+            <span className="text-primary font-mono">... --- ...</span>
           </div>
-
-          {/* User Info */}
+          
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-muted-foreground">
-              <User className="h-4 w-4" />
-              <span className="font-mono">{currentUser}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Leaderboard Section */}
-        <div className="pb-4">
-          <Collapsible open={isLeaderboardOpen} onOpenChange={setIsLeaderboardOpen}>
-            <CollapsibleTrigger asChild>
-              <Button 
-                variant="outline" 
-                className="w-full justify-between terminal-border font-mono"
-              >
-                <div className="flex items-center space-x-2">
-                  <Trophy className="h-4 w-4" />
-                  <span>LEADERBOARD</span>
-                </div>
-                {isLeaderboardOpen ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </Button>
-            </CollapsibleTrigger>
+            {user && (
+              <span className="text-primary font-mono text-sm">
+                Welcome, {user.user_metadata?.name || user.email}
+              </span>
+            )}
             
-            <CollapsibleContent className="mt-4">
-              <Card className="terminal-border">
-                <CardHeader>
-                  <CardTitle className="text-primary font-display flex items-center space-x-2">
-                    <Trophy className="h-5 w-5" />
-                    <span>Top 10 Participants</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {leaderboardData.map((participant) => (
-                      <div
-                        key={participant.rank}
-                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border terminal-border"
-                      >
-                        <div className="flex items-center space-x-4">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold ${
-                            participant.rank <= 3 
-                              ? 'bg-primary text-primary-foreground' 
-                              : 'bg-muted text-muted-foreground'
-                          }`}>
-                            {participant.rank}
-                          </div>
-                          <span className="font-mono">{participant.username}</span>
-                        </div>
-                        <div className="flex items-center space-x-6 text-sm text-muted-foreground">
-                          <span className="font-mono">{participant.score}%</span>
-                          <span className="font-mono">{participant.time}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </CollapsibleContent>
-          </Collapsible>
+            <Button
+              onClick={() => setIsLeaderboardOpen(!isLeaderboardOpen)}
+              variant="outline"
+              className="terminal-border font-mono"
+            >
+              <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${isLeaderboardOpen ? 'rotate-180' : ''}`} />
+              LEADERBOARD
+            </Button>
+
+            {user && (
+              <Button
+                onClick={handleSignOut}
+                variant="outline"
+                size="sm"
+                className="terminal-border font-mono"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Collapsible Leaderboard */}
+      {isLeaderboardOpen && (
+        <div className="border-t terminal-border">
+          <div className="container mx-auto px-4 py-4">
+            <Card className="terminal-border">
+              <CardHeader>
+                <CardTitle className="text-primary font-display">
+                  Top 10 Participants
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {leaderboard.length > 0 ? (
+                    leaderboard.map((entry) => (
+                      <div key={entry.rank} className="flex justify-between items-center py-2 px-3 bg-muted/50 rounded terminal-border">
+                        <div className="flex items-center space-x-3">
+                          <span className="text-morse-glow font-mono font-bold min-w-[30px]">
+                            #{entry.rank}
+                          </span>
+                          <span className="font-mono text-primary">
+                            {entry.display_name}
+                          </span>
+                        </div>
+                        <div className="flex space-x-4 text-sm font-mono">
+                          <span className="text-morse-glow">
+                            {Math.round(entry.total_score)}%
+                          </span>
+                          <span className="text-muted-foreground">
+                            {entry.total_time}s
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-muted-foreground font-mono py-4">
+                      No participants yet
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </nav>
   );
 };

@@ -4,15 +4,29 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 
 interface UserAnswer {
   question_number: number;
   user_answer: string;
   is_correct: boolean;
-  time_taken_seconds: number;
+  timestamp: number;
 }
+
+interface UserProgress {
+  currentQuestionIndex: number;
+  answers: { [questionId: number]: { answer: string; isCorrect: boolean; timestamp: number } };
+  completedQuestions: number[];
+}
+
+// Question data for displaying results
+const QUESTIONS = [
+  { id: 1, question_number: 1, text: "Bitrate" },
+  { id: 2, question_number: 2, text: "Encryption" },
+  { id: 3, question_number: 3, text: "Synchronous" },
+  { id: 4, question_number: 4, text: "Redundancy" },
+  { id: 5, question_number: 5, text: "Cryptotelephony" }
+];
 
 const Results = () => {
   const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
@@ -22,6 +36,8 @@ const Results = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const getUserProgressKey = () => `morse_competition_progress_${user?.id || 'anonymous'}`;
+
   useEffect(() => {
     if (!user) {
       navigate("/");
@@ -30,55 +46,60 @@ const Results = () => {
     loadResults();
   }, [user, navigate]);
 
-  const loadResults = async () => {
+  const loadResults = () => {
     try {
-      const { data, error } = await supabase
-        .from("user_answers")
-        .select(`
-          user_answer,
-          is_correct,
-          time_taken_seconds,
-          questions!inner(question_number)
-        `)
-        .eq("user_id", user?.id)
-        .order("questions(question_number)");
+      const saved = localStorage.getItem(getUserProgressKey());
+      if (!saved) {
+        // No data found, redirect to competition
+        navigate("/competition");
+        return;
+      }
 
-      if (error) throw error;
+      const progress: UserProgress = JSON.parse(saved);
+      const answers: UserAnswer[] = [];
 
-      const answers = data?.map((answer: any) => ({
-        question_number: answer.questions.question_number,
-        user_answer: answer.user_answer,
-        is_correct: answer.is_correct,
-        time_taken_seconds: answer.time_taken_seconds,
-      })) || [];
+      // Convert stored answers to display format
+      QUESTIONS.forEach(question => {
+        const answer = progress.answers[question.id];
+        if (answer) {
+          answers.push({
+            question_number: question.question_number,
+            user_answer: answer.answer,
+            is_correct: answer.isCorrect,
+            timestamp: answer.timestamp
+          });
+        }
+      });
 
       setUserAnswers(answers);
       
       const correctCount = answers.filter(a => a.is_correct).length;
-      const totalTimeSeconds = answers.reduce((sum, a) => sum + a.time_taken_seconds, 0);
+      setScore((correctCount / QUESTIONS.length) * 100);
       
-      setScore((correctCount / 5) * 100); // 5 total questions
-      setTotalTime(totalTimeSeconds);
+      // Calculate total time based on timestamps
+      if (answers.length > 1) {
+        const firstTimestamp = Math.min(...answers.map(a => a.timestamp));
+        const lastTimestamp = Math.max(...answers.map(a => a.timestamp));
+        const totalTimeSeconds = Math.floor((lastTimestamp - firstTimestamp) / 1000);
+        setTotalTime(totalTimeSeconds);
+      }
+      
       setLoading(false);
     } catch (error) {
       console.error("Error loading results:", error);
-      setLoading(false);
+      navigate("/competition");
     }
   };
 
-  const handleRetry = async () => {
-    try {
-      // Delete previous answers
-      await supabase
-        .from("user_answers")
-        .delete()
-        .eq("user_id", user?.id);
-      
-      navigate("/competition");
-    } catch (error) {
-      console.error("Error clearing previous answers:", error);
-      navigate("/competition");
-    }
+  const handleRetry = () => {
+    // Clear localStorage data
+    localStorage.removeItem(getUserProgressKey());
+    navigate("/competition");
+  };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString();
   };
 
   if (loading) {
@@ -123,8 +144,13 @@ const Results = () => {
                   ACCURACY RATING
                 </div>
                 <div className="text-xs sm:text-sm text-muted-foreground font-mono mb-2">
-                  Total Time: {totalTime}s
+                  Questions Completed: {userAnswers.length} / {QUESTIONS.length}
                 </div>
+                {totalTime > 0 && (
+                  <div className="text-xs sm:text-sm text-muted-foreground font-mono mb-2">
+                    Total Time: {totalTime}s
+                  </div>
+                )}
                 <Progress value={score} className="h-3" />
               </div>
             </CardContent>
@@ -139,29 +165,67 @@ const Results = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {userAnswers.map((answer) => (
-                  <div key={answer.question_number} className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 px-3 bg-muted/50 rounded terminal-border space-y-1 sm:space-y-0">
-                    <span className="font-mono text-primary text-sm sm:text-base">
-                      Q{answer.question_number}:
-                    </span>
-                    <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4">
-                      <span className="font-mono text-morse-glow text-sm sm:text-base break-all">
-                        {answer.user_answer}
+                {QUESTIONS.map((question) => {
+                  const answer = userAnswers.find(a => a.question_number === question.question_number);
+                  return (
+                    <div key={question.question_number} className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 px-3 bg-muted/50 rounded terminal-border space-y-1 sm:space-y-0">
+                      <span className="font-mono text-primary text-sm sm:text-base">
+                        Q{question.question_number} ({question.text}):
                       </span>
-                      <div className="flex items-center space-x-2 sm:space-x-4 text-xs">
-                        <span className={`px-2 py-1 rounded ${answer.is_correct ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                          {answer.is_correct ? '✓' : '✗'}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {answer.time_taken_seconds}s
-                        </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4">
+                        {answer ? (
+                          <>
+                            <span className="font-mono text-morse-glow text-sm sm:text-base break-all">
+                              {answer.user_answer}
+                            </span>
+                            <div className="flex items-center space-x-2 sm:space-x-4 text-xs">
+                              <span className={`px-2 py-1 rounded ${answer.is_correct ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                {answer.is_correct ? '✓' : '✗'}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {formatTime(answer.timestamp)}
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">
+                            Not attempted
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
+
+          {/* Performance Analysis */}
+          {userAnswers.length > 0 && (
+            <Card className="terminal-border mb-6 sm:mb-8">
+              <CardHeader className="pb-4 sm:pb-6">
+                <CardTitle className="text-primary font-display text-lg sm:text-xl">
+                  PERFORMANCE ANALYSIS
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-green-400 font-mono">
+                      {userAnswers.filter(a => a.is_correct).length}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Correct</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-red-400 font-mono">
+                      {userAnswers.filter(a => !a.is_correct).length}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Incorrect</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-4 justify-center">
@@ -171,6 +235,14 @@ const Results = () => {
               size="lg"
             >
               RETRY MISSION
+            </Button>
+            <Button
+              onClick={() => navigate("/")}
+              variant="outline"
+              className="font-mono text-sm sm:text-base px-6 sm:px-8"
+              size="lg"
+            >
+              MAIN MENU
             </Button>
           </div>
         </div>

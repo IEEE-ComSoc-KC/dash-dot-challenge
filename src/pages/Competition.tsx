@@ -5,54 +5,117 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 
 interface Question {
-  id: string;
+  id: number;
   question_number: number;
   question_text: string;
   correct_answer: string;
 }
 
+interface UserProgress {
+  currentQuestionIndex: number;
+  answers: { [questionId: number]: { answer: string; isCorrect: boolean; timestamp: number } };
+  completedQuestions: number[];
+}
+
+// Updated questions with morse code challenges
+const QUESTIONS: Question[] = [
+  {
+    id: 1,
+    question_number: 1,
+    question_text: "What is the morse code for 'Bitrate'?",
+    correct_answer: "-... .. - .-. .- - ."
+  },
+  {
+    id: 2,
+    question_number: 2,
+    question_text: "What is the morse code for 'Encryption'?",
+    correct_answer: ". -. -.-. .-. -.-- .--. - .. --- -."
+  },
+  {
+    id: 3,
+    question_number: 3,
+    question_text: "What is the morse code for 'Synchronous'?",
+    correct_answer: "... -.-- -. -.-. .... .-. --- -. --- ..- ..."
+  },
+  {
+    id: 4,
+    question_number: 4,
+    question_text: "What is the morse code for 'Redundancy'?",
+    correct_answer: ".-. . -.. ..- -. -.. .- -. -.-. -.--"
+  },
+  {
+    id: 5,
+    question_number: 5,
+    question_text: "What is the morse code for 'Cryptotelephony'?",
+    correct_answer: "-.-. .-. -.-- .--. - --- - . .-.. . .--. .... --- -. -.--"
+  }
+];
+
 const Competition = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [morseInput, setMorseInput] = useState("");
-  const [questions, setQuestions] = useState<Question[]>([]);
   const [questionStartTime, setQuestionStartTime] = useState<Date | null>(null);
+  const [userProgress, setUserProgress] = useState<UserProgress>({
+    currentQuestionIndex: 0,
+    answers: {},
+    completedQuestions: []
+  });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // localStorage helper functions
+  const getUserProgressKey = () => `morse_competition_progress_${user?.id || 'anonymous'}`;
+  
+  const saveProgressToLocalStorage = (progress: UserProgress) => {
+    localStorage.setItem(getUserProgressKey(), JSON.stringify(progress));
+  };
+
+  const loadProgressFromLocalStorage = (): UserProgress => {
+    const saved = localStorage.getItem(getUserProgressKey());
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse saved progress:", e);
+      }
+    }
+    return {
+      currentQuestionIndex: 0,
+      answers: {},
+      completedQuestions: []
+    };
+  };
 
   useEffect(() => {
     if (!user) {
       navigate("/");
       return;
     }
-    loadQuestions();
+    initializeCompetition();
   }, [user, navigate]);
 
-  const loadQuestions = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("*")
-        .order("question_number");
+  const initializeCompetition = () => {
+    const savedProgress = loadProgressFromLocalStorage();
+    setUserProgress(savedProgress);
+    setCurrentQuestionIndex(savedProgress.currentQuestionIndex);
+    setQuestionStartTime(new Date());
+    setLoading(false);
+  };
 
-      if (error) throw error;
-      
-      setQuestions(data || []);
-      setQuestionStartTime(new Date());
-      setLoading(false);
-    } catch (error) {
-      console.error("Error loading questions:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load questions",
-        variant: "destructive",
-      });
-    }
+  const canAccessQuestion = (questionIndex: number): boolean => {
+    // First question is always accessible
+    if (questionIndex === 0) return true;
+    
+    // For subsequent questions, check if previous question was answered correctly
+    const previousQuestionId = QUESTIONS[questionIndex - 1].id;
+    const previousAnswer = userProgress.answers[previousQuestionId];
+    
+    return previousAnswer && previousAnswer.isCorrect;
   };
 
   const addDot = () => {
@@ -61,6 +124,10 @@ const Competition = () => {
 
   const addDash = () => {
     setMorseInput(prev => prev + "-");
+  };
+
+  const addSpace = () => {
+    setMorseInput(prev => prev + " ");
   };
 
   const clearInput = () => {
@@ -79,44 +146,57 @@ const Competition = () => {
 
     if (!questionStartTime || !user) return;
 
-    const currentQuestion = questions[currentQuestionIndex];
+    const currentQuestion = QUESTIONS[currentQuestionIndex];
     const endTime = new Date();
     const timeTakenSeconds = Math.floor((endTime.getTime() - questionStartTime.getTime()) / 1000);
-    const isCorrect = morseInput === currentQuestion.correct_answer;
+    const isCorrect = morseInput.trim() === currentQuestion.correct_answer;
 
-    try {
-      const { error } = await supabase
-        .from("user_answers")
-        .insert({
-          user_id: user.id,
-          question_id: currentQuestion.id,
-          user_answer: morseInput,
-          is_correct: isCorrect,
-          time_taken_seconds: timeTakenSeconds,
-        });
+    // Update user progress
+    const newProgress: UserProgress = {
+      ...userProgress,
+      answers: {
+        ...userProgress.answers,
+        [currentQuestion.id]: {
+          answer: morseInput.trim(),
+          isCorrect,
+          timestamp: endTime.getTime()
+        }
+      }
+    };
 
-      if (error) throw error;
-
-      if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex(prev => prev + 1);
+    if (isCorrect) {
+      newProgress.completedQuestions = [...new Set([...userProgress.completedQuestions, currentQuestion.id])];
+      
+      if (currentQuestionIndex < QUESTIONS.length - 1) {
+        // Move to next question
+        newProgress.currentQuestionIndex = currentQuestionIndex + 1;
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
         setMorseInput("");
         setQuestionStartTime(new Date());
+        
         toast({
-          title: "Answer Submitted",
-          description: `Question ${currentQuestionIndex + 1} completed`,
+          title: "Correct!",
+          description: `Question ${currentQuestionIndex + 1} completed. Moving to next question.`,
         });
       } else {
         // Competition finished
+        toast({
+          title: "Congratulations!",
+          description: "You have completed all questions successfully!",
+        });
         navigate("/results");
       }
-    } catch (error) {
-      console.error("Error submitting answer:", error);
+    } else {
       toast({
-        title: "Error",
-        description: "Failed to submit answer",
+        title: "Incorrect Answer",
+        description: "Please try again. You must answer correctly to proceed.",
         variant: "destructive",
       });
     }
+
+    // Save progress
+    setUserProgress(newProgress);
+    saveProgressToLocalStorage(newProgress);
   };
 
   if (loading) {
@@ -124,25 +204,43 @@ const Competition = () => {
       <div className="min-h-screen bg-background">
         <Navbar />
         <div className="container mx-auto px-4 py-8 flex items-center justify-center">
-          <div className="text-primary font-mono">Loading questions...</div>
+          <div className="text-primary font-mono">Loading competition...</div>
         </div>
       </div>
     );
   }
 
-  if (questions.length === 0) {
+  // Check if current question is accessible
+  if (!canAccessQuestion(currentQuestionIndex)) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
         <div className="container mx-auto px-4 py-8 flex items-center justify-center">
-          <div className="text-primary font-mono">No questions available</div>
+          <Card className="terminal-border max-w-md">
+            <CardContent className="p-6 text-center">
+              <div className="text-primary font-mono mb-4">🔒 Question Locked</div>
+              <p className="text-muted-foreground">
+                You must complete the previous question correctly to access this question.
+              </p>
+              <Button 
+                onClick={() => {
+                  const lastAccessibleIndex = Math.max(0, currentQuestionIndex - 1);
+                  setCurrentQuestionIndex(lastAccessibleIndex);
+                }}
+                className="mt-4"
+              >
+                Go Back
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
   }
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+  const currentQuestion = QUESTIONS[currentQuestionIndex];
+  const progress = ((userProgress.completedQuestions.length) / QUESTIONS.length) * 100;
+  const currentAnswer = userProgress.answers[currentQuestion.id];
 
   return (
     <div className="min-h-screen bg-background">
@@ -154,14 +252,32 @@ const Competition = () => {
           <div className="mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-2 space-y-1 sm:space-y-0">
               <span className="text-primary font-mono text-sm sm:text-base">
-                Question {currentQuestionIndex + 1} of {questions.length}
+                Question {currentQuestionIndex + 1} of {QUESTIONS.length}
               </span>
               <span className="text-muted-foreground font-mono text-sm">
-                {Math.round(progress)}% Complete
+                {userProgress.completedQuestions.length} completed ({Math.round(progress)}%)
               </span>
             </div>
             <Progress value={progress} className="h-2" />
           </div>
+
+          {/* Question Status */}
+          {currentAnswer && (
+            <Card className={`terminal-border mb-4 ${currentAnswer.isCorrect ? 'border-green-500' : 'border-red-500'}`}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-sm">
+                    {currentAnswer.isCorrect ? '✓ Completed' : '✗ Incorrect - Try again'}
+                  </span>
+                  {currentAnswer.isCorrect && (
+                    <span className="text-xs text-muted-foreground">
+                      Your answer: {currentAnswer.answer}
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Question Card */}
           <Card className="terminal-border mb-6 sm:mb-8">
@@ -174,6 +290,12 @@ const Competition = () => {
               <p className="text-base sm:text-lg font-mono leading-relaxed">
                 {currentQuestion.question_text}
               </p>
+              <div className="mt-4 p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  💡 Tip: Use dots (.), dashes (-), and spaces to separate letters. 
+                  Each letter should be separated by a space.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
@@ -198,7 +320,7 @@ const Competition = () => {
               </div>
 
               {/* Input Buttons */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-3 gap-3 sm:gap-4">
                 <Button
                   onClick={addDot}
                   size="lg"
@@ -217,6 +339,14 @@ const Competition = () => {
                   ─
                   <span className="ml-1 sm:ml-2 text-xs sm:text-sm">DASH</span>
                 </Button>
+                <Button
+                  onClick={addSpace}
+                  size="lg"
+                  variant="outline"
+                  className="h-12 sm:h-16 text-sm font-mono terminal-border hover:bg-muted"
+                >
+                  SPACE
+                </Button>
               </div>
 
               {/* Action Buttons */}
@@ -232,9 +362,9 @@ const Competition = () => {
                 <Button
                   onClick={handleSubmit}
                   className="flex-1 font-mono morse-glow text-sm sm:text-base"
-                  disabled={!morseInput}
+                  disabled={!morseInput || (currentAnswer?.isCorrect && currentQuestionIndex === QUESTIONS.length - 1)}
                 >
-                  SUBMIT
+                  {currentAnswer?.isCorrect && currentQuestionIndex === QUESTIONS.length - 1 ? 'COMPLETED' : 'SUBMIT'}
                 </Button>
               </div>
             </CardContent>

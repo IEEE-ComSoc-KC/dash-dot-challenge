@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 
 interface UserAnswer {
@@ -33,6 +34,7 @@ const Results = () => {
   const [score, setScore] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<'database' | 'localStorage'>('database');
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -46,14 +48,44 @@ const Results = () => {
     loadResults();
   }, [user, navigate]);
 
-  const loadResults = () => {
+  const loadResultsFromDatabase = async (): Promise<UserAnswer[] | null> => {
+    try {
+      if (!user) return null;
+
+      const { data: userAnswers, error } = await supabase
+        .from("user_answers")
+        .select("question_id, user_answer, is_correct, answered_at")
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      if (!userAnswers || userAnswers.length === 0) return null;
+
+      // Convert database format to display format
+      const answers: UserAnswer[] = [];
+      userAnswers.forEach(answer => {
+        const question = QUESTIONS.find(q => q.id.toString() === answer.question_id);
+        if (question) {
+          answers.push({
+            question_number: question.question_number,
+            user_answer: answer.user_answer,
+            is_correct: answer.is_correct,
+            timestamp: new Date(answer.answered_at).getTime()
+          });
+        }
+      });
+
+      return answers.sort((a, b) => a.question_number - b.question_number);
+    } catch (error) {
+      console.error("Failed to load from database:", error);
+      return null;
+    }
+  };
+
+  const loadResultsFromLocalStorage = (): UserAnswer[] => {
     try {
       const saved = localStorage.getItem(getUserProgressKey());
-      if (!saved) {
-        // No data found, redirect to competition
-        navigate("/competition");
-        return;
-      }
+      if (!saved) return [];
 
       const progress: UserProgress = JSON.parse(saved);
       const answers: UserAnswer[] = [];
@@ -71,8 +103,39 @@ const Results = () => {
         }
       });
 
-      setUserAnswers(answers);
+      return answers;
+    } catch (error) {
+      console.error("Failed to parse localStorage:", error);
+      return [];
+    }
+  };
+
+  const loadResults = async () => {
+    try {
+      // Try database first
+      const dbAnswers = await loadResultsFromDatabase();
       
+      if (dbAnswers && dbAnswers.length > 0) {
+        console.log("Loaded results from database");
+        setUserAnswers(dbAnswers);
+        setDataSource('database');
+      } else {
+        // Fallback to localStorage
+        console.log("Loading results from localStorage");
+        const localAnswers = loadResultsFromLocalStorage();
+        setUserAnswers(localAnswers);
+        setDataSource('localStorage');
+      }
+
+      // Calculate stats based on loaded answers
+      const answers = dbAnswers && dbAnswers.length > 0 ? dbAnswers : loadResultsFromLocalStorage();
+      
+      if (answers.length === 0) {
+        // No data found, redirect to competition
+        navigate("/competition");
+        return;
+      }
+
       const correctCount = answers.filter(a => a.is_correct).length;
       setScore((correctCount / QUESTIONS.length) * 100);
       
@@ -91,8 +154,20 @@ const Results = () => {
     }
   };
 
-  const handleRetry = () => {
-    // Clear localStorage data
+  const handleRetry = async () => {
+    try {
+      // Try to clear database first
+      if (dataSource === 'database' && user) {
+        await supabase
+          .from("user_answers")
+          .delete()
+          .eq("user_id", user.id);
+      }
+    } catch (error) {
+      console.log("Could not clear database, proceeding with localStorage clear");
+    }
+    
+    // Always clear localStorage
     localStorage.removeItem(getUserProgressKey());
     navigate("/competition");
   };
@@ -119,6 +194,14 @@ const Results = () => {
       
       <div className="container mx-auto px-4 py-4 sm:py-8">
         <div className="max-w-2xl mx-auto text-center">
+          {/* Data Source Indicator */}
+          <div className="mb-4 p-2 rounded-lg bg-muted/50 text-center">
+            <span className="text-xs text-muted-foreground font-mono">
+              {dataSource === 'database' ? '☁️ Results from Database' : '📱 Results from Local Storage'} | 
+              User: {user?.email?.substring(0, 20)}...
+            </span>
+          </div>
+
           <div className="mb-6 sm:mb-8">
             <h1 className="text-3xl sm:text-4xl font-bold text-primary mb-4 font-display morse-glow">
               MISSION COMPLETE

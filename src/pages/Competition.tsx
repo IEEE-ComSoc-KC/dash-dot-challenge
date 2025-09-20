@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 
 interface Question {
@@ -20,7 +21,7 @@ interface UserProgress {
   completedQuestions: number[];
 }
 
-// Updated questions with morse code challenges
+// Updated questions with morse code challenges - these will be the source of truth
 const QUESTIONS: Question[] = [
   {
     id: 1,
@@ -64,6 +65,7 @@ const Competition = () => {
     completedQuestions: []
   });
   const [loading, setLoading] = useState(true);
+  const [useLocalStorage, setUseLocalStorage] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -91,6 +93,88 @@ const Competition = () => {
     };
   };
 
+  // Database helper functions
+  const loadProgressFromDatabase = async (): Promise<UserProgress | null> => {
+    try {
+      if (!user) return null;
+
+      // Try to get user answers from database
+      const { data: userAnswers, error: answersError } = await supabase
+        .from("user_answers")
+        .select("question_id, user_answer, is_correct, answered_at")
+        .eq("user_id", user.id);
+
+      if (answersError) throw answersError;
+
+      // Convert database format to our progress format
+      const answers: { [questionId: number]: { answer: string; isCorrect: boolean; timestamp: number } } = {};
+      const completedQuestions: number[] = [];
+      let currentQuestionIndex = 0;
+
+      if (userAnswers) {
+        userAnswers.forEach(answer => {
+          // Convert UUID question_id to our numeric IDs
+          const question = QUESTIONS.find(q => q.id.toString() === answer.question_id);
+          if (question) {
+            answers[question.id] = {
+              answer: answer.user_answer,
+              isCorrect: answer.is_correct,
+              timestamp: new Date(answer.answered_at).getTime()
+            };
+
+            if (answer.is_correct) {
+              completedQuestions.push(question.id);
+            }
+          }
+        });
+
+        // Find the current question index - first unanswered correct question
+        for (let i = 0; i < QUESTIONS.length; i++) {
+          const questionAnswer = answers[QUESTIONS[i].id];
+          if (!questionAnswer || !questionAnswer.isCorrect) {
+            currentQuestionIndex = i;
+            break;
+          }
+          if (i === QUESTIONS.length - 1) {
+            currentQuestionIndex = QUESTIONS.length - 1; // All completed
+          }
+        }
+      }
+
+      return {
+        currentQuestionIndex,
+        answers,
+        completedQuestions
+      };
+    } catch (error) {
+      console.error("Failed to load from database:", error);
+      return null;
+    }
+  };
+
+  const saveAnswerToDatabase = async (questionId: number, answer: string, isCorrect: boolean, timeTaken: number) => {
+    try {
+      if (!user) return false;
+
+      const { error } = await supabase
+        .from("user_answers")
+        .upsert({
+          user_id: user.id,
+          question_id: questionId.toString(), // Convert to string for UUID compatibility
+          user_answer: answer,
+          is_correct: isCorrect,
+          time_taken_seconds: timeTaken,
+          answered_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error("Failed to save to database:", error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (!user) {
       navigate("/");
@@ -99,12 +183,40 @@ const Competition = () => {
     initializeCompetition();
   }, [user, navigate]);
 
-  const initializeCompetition = () => {
-    const savedProgress = loadProgressFromLocalStorage();
-    setUserProgress(savedProgress);
-    setCurrentQuestionIndex(savedProgress.currentQuestionIndex);
-    setQuestionStartTime(new Date());
-    setLoading(false);
+  const initializeCompetition = async () => {
+    try {
+      // First try to load from database
+      const dbProgress = await loadProgressFromDatabase();
+      
+      if (dbProgress) {
+        console.log("Loaded progress from database");
+        setUserProgress(dbProgress);
+        setCurrentQuestionIndex(dbProgress.currentQuestionIndex);
+        setUseLocalStorage(false);
+      } else {
+        // Fallback to localStorage
+        console.log("Falling back to localStorage");
+        const localProgress = loadProgressFromLocalStorage();
+        setUserProgress(localProgress);
+        setCurrentQuestionIndex(localProgress.currentQuestionIndex);
+        setUseLocalStorage(true);
+      }
+      
+      setQuestionStartTime(new Date());
+      setLoading(false);
+    } catch (error) {
+      console.error("Failed to initialize competition:", error);
+      // Ultimate fallback
+      setUserProgress({
+        currentQuestionIndex: 0,
+        answers: {},
+        completedQuestions: []
+      });
+      setCurrentQuestionIndex(0);
+      setUseLocalStorage(true);
+      setQuestionStartTime(new Date());
+      setLoading(false);
+    }
   };
 
   const canAccessQuestion = (questionIndex: number): boolean => {
@@ -151,7 +263,16 @@ const Competition = () => {
     const timeTakenSeconds = Math.floor((endTime.getTime() - questionStartTime.getTime()) / 1000);
     const isCorrect = morseInput.trim() === currentQuestion.correct_answer;
 
-    // Update user progress
+    // Try to save to database first, fallback to localStorage
+    if (!useLocalStorage) {
+      const dbSaved = await saveAnswerToDatabase(currentQuestion.id, morseInput.trim(), isCorrect, timeTakenSeconds);
+      if (!dbSaved) {
+        console.log("Database save failed, switching to localStorage");
+        setUseLocalStorage(true);
+      }
+    }
+
+    // Update local progress
     const newProgress: UserProgress = {
       ...userProgress,
       answers: {
@@ -184,7 +305,7 @@ const Competition = () => {
           title: "Congratulations!",
           description: "You have completed all questions successfully!",
         });
-        navigate("/results");
+        setTimeout(() => navigate("/results"), 1500);
       }
     } else {
       toast({
@@ -194,7 +315,7 @@ const Competition = () => {
       });
     }
 
-    // Save progress
+    // Always save to localStorage as backup
     setUserProgress(newProgress);
     saveProgressToLocalStorage(newProgress);
   };
@@ -248,6 +369,14 @@ const Competition = () => {
       
       <div className="container mx-auto px-4 py-4 sm:py-8">
         <div className="max-w-2xl mx-auto">
+          {/* Storage Status Indicator */}
+          <div className="mb-4 p-2 rounded-lg bg-muted/50 text-center">
+            <span className="text-xs text-muted-foreground font-mono">
+              {useLocalStorage ? '📱 Local Storage Mode' : '☁️ Database Mode'} | 
+              User: {user?.email?.substring(0, 20)}...
+            </span>
+          </div>
+
           {/* Progress */}
           <div className="mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-2 space-y-1 sm:space-y-0">
